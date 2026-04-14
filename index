@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diagnostic Morphodynamique - La Hem</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    
+    <style>
+        /* ============================================================
+         * 1. CHARTE GRAPHIQUE & VARIABLES CSS
+         * ============================================================ */
+        :root {
+            --color-primary: #5C7689; 
+            --color-e1: #3182bd;
+            --color-e2: #31a354;
+            --color-e3: #e6550d;
+            --color-e4: #de2d26;
+            --color-bg: #f5f8fb;
+            --shadow-card: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        body { 
+            margin: 0; 
+            padding: 0; 
+            font-family: 'Helvetica Neue', Arial, sans-serif; 
+            background-color: var(--color-bg);
+            overflow-x: hidden; 
+        }
+
+        #map { 
+            height: 100vh; 
+            width: 100%; 
+            z-index: 1;
+        }
+
+        /* ============================================================
+         * 2. ÉLÉMENTS D'INTERFACE (UI)
+         * ============================================================ */
+        
+        #map-title {
+            position: absolute;
+            top: 15px; 
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 12px 30px; 
+            border-radius: 50px;
+            box-shadow: var(--shadow-card);
+            text-align: center;
+            border: 1px solid #ddd;
+            width: auto;
+            max-width: 80%;
+        }
+        
+        #map-title h1 { 
+            margin: 0; 
+            font-size: 18px; 
+            color: #2c3e50; 
+            text-transform: uppercase; 
+            letter-spacing: 1px;
+        }
+        
+        #map-title p { 
+            margin: 5px 0 0 0; 
+            font-size: 13px; 
+            color: #7f8c8d; 
+        }
+
+        .leaflet-top.leaflet-right { margin-top: 140px; }
+
+        .info {
+            padding: 15px;
+            font: 13px/16px Arial, Helvetica, sans-serif;
+            background: rgba(255,255,255,0.98);
+            box-shadow: var(--shadow-card);
+            border-radius: 6px;
+            min-width: 320px;
+        }
+        .info h4 { 
+            margin: 0 0 10px; 
+            color: #333; 
+            font-size: 15px; 
+            border-bottom: 2px solid var(--color-primary); 
+            padding-bottom: 5px; 
+            text-transform: uppercase; 
+        }
+
+        .data-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        .data-table th { text-align: center; color: #777; font-size: 0.85em; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
+        .data-table td { padding: 5px 0; border-bottom: 1px solid #f0f0f0; font-size: 0.95em; text-align: center;}
+        
+        .val-focus { font-weight: bold; color: #222; background-color: #f9f9f9;}
+
+        .legend { 
+            line-height: 22px; 
+            color: #555; 
+            background: rgba(255,255,255,0.95); 
+            padding: 12px; 
+            border-radius: 5px; 
+            box-shadow: var(--shadow-card); 
+            min-width: 200px;
+            font-size: 13px;
+        }
+        .legend i { width: 18px; height: 18px; float: left; margin-right: 8px; opacity: 0.9; }
+        .legend h4 { margin: 12px 0 5px 0; font-size: 14px; color: #333; border-bottom: 1px solid #ccc; padding-bottom: 3px;}
+        .legend h4:first-child { margin-top: 0; }
+
+        /* ============================================================
+         * 3. COMPOSANT MODAL (Aide / Méthodo)
+         * ============================================================ */
+        .modal { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); backdrop-filter: blur(3px); }
+        .modal-content { background-color: #fefefe; margin: 8% auto; padding: 30px; border: 1px solid #888; width: 90%; max-width: 650px; border-radius: 10px; box-shadow: 0 5px 25px rgba(0,0,0,0.3); line-height: 1.6; }
+        .close-btn { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; transition: color 0.3s; }
+        .close-btn:hover { color: #333; }
+        .modal-content h2 { margin-top: 0; color: #2c3e50; border-bottom: 3px solid var(--color-primary); padding-bottom: 10px; }
+
+        .leaflet-control-custom-info { 
+            background: white; width: 32px; height: 32px; border-radius: 4px; box-shadow: 0 1px 5px rgba(0,0,0,0.65); 
+            cursor: pointer; text-align: center; line-height: 32px; font-weight: bold; font-size: 16px; color: #555; transition: background 0.2s;
+        }
+        .leaflet-control-custom-info:hover { background: #f0f0f0; color: #000; }
+        
+    </style>
+</head>
+<body>
+
+<div id="map-title">
+    <h1>Diagnostic Morphodynamique de la Hem</h1>
+    <p>Évolution de la puissance spécifique et secteurs géomorphologiques homogènes</p>
+</div>
+
+<div id="infoModal" class="modal">
+    <div class="modal-content">
+        <span class="close-btn" onclick="closeModal()">&times;</span>
+        <h2>Méthodologie & Seuils</h2>
+        <p>Cette carte représente les secteurs géomorphologiques de la Hem selon leur <strong>Puissance Spécifique (Ps)</strong>, calculée pour différentes périodes de retour de crue (Q2 à Q100).</p>
+        <p><strong>Typologie géodynamique (Malavoi, 2007) :</strong></p>
+        <ul>
+            <li><span style="color:#3182bd; font-weight:bold;">E1 - Énergie Nulle (< 10 W/m²)</span> : Dépôt dominant, sédimentation.</li>
+            <li><span style="color:#31a354; font-weight:bold;">E2 - Énergie Faible (10-30 W/m²)</span> : Ajustements lents, transit sédimentaire.</li>
+            <li><span style="color:#e6550d; font-weight:bold;">E3 - Énergie Moyenne (30-100 W/m²)</span> : Équilibre dynamique.</li>
+            <li><span style="color:#de2d26; font-weight:bold;">E4 - Énergie Forte (> 100 W/m²)</span> : Érosion active, incision possible.</li>
+        </ul>
+        <p><em>Formule utilisée : Ps = (9810 × Q × Pente) / Largeur</em></p>
+    </div>
+</div>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+<script>
+    // --- 1. INITIALISATION DE LA CARTE & FONDS DE PLAN ---
+    const basemapLight = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { attribution: '© OpenStreetMap & CARTO', maxZoom: 19 });
+    const basemapPlan = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 });
+    const basemapSat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: '© Esri', maxZoom: 18 });
+
+    const map = L.map('map', { center: [50.78, 2.05], zoom: 11, layers: [basemapLight] });
+    L.control.scale({ position: 'bottomleft', metric: true, imperial: false }).addTo(map);
+
+    let currentActiveQ = 'Q100'; 
+
+    // --- 2. BOUTON MODAL (?) ---
+    const InfoControl = L.Control.extend({
+        options: { position: 'topleft' },
+        onAdd: function (map) {
+            const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom-info');
+            container.innerHTML = '?'; 
+            container.onclick = (e) => {
+                L.DomEvent.stopPropagation(e);
+                document.getElementById("infoModal").style.display = "block";
+            };
+            return container;
+        }
+    });
+    map.addControl(new InfoControl());
+
+    function closeModal() { document.getElementById("infoModal").style.display = "none"; }
+    window.onclick = function(event) { if (event.target === document.getElementById("infoModal")) closeModal(); }
+
+    // --- 3. FONCTIONS GRAPHIQUES ---
+    function getClassColor(cls) {
+        if (cls === "E4") return 'var(--color-e4)';
+        if (cls === "E3") return 'var(--color-e3)';
+        if (cls === "E2") return 'var(--color-e2)';
+        return 'var(--color-e1)'; 
+    }
+
+    function getGeolColor(descr) {
+        if (!descr) return '#dfc27d'; 
+        let d = descr.toLowerCase(); 
+        if (d.includes('alluvion')) return '#a6cee3';   
+        if (d.includes('colluvion')) return '#b2df8a';  
+        if (d.includes('loess')) return '#fdbf6f';      
+        if (d.includes('altérite') || d.includes('silex')) return '#cab2d6'; 
+        return '#dfc27d'; 
+    }
+
+    // --- 4. PANNEAU D'INFORMATION (HOVER) ---
+    const info = L.control({position: 'topright'});
+    
+    info.onAdd = function (map) { 
+        this._div = L.DomUtil.create('div', 'info'); 
+        this.update(); 
+        return this._div; 
+    };
+
+    info.update = function (props) {
+        if (props) {
+            let pente = props.Pente_HB ? (props.Pente_HB * 100).toFixed(3) : 'N/A';
+            let largeur = props.Largeur_moy ? props.Largeur_moy.toFixed(1) : 'N/A';
+            let bv = props.BV_VRAI ? props.BV_VRAI.toFixed(1) : 'N/A';
+            
+            const highlightClass = (q) => q === currentActiveQ ? 'val-focus' : '';
+
+            this._div.innerHTML = `
+                <h4>Secteur : ${props.Typologie || 'N/A'}</h4>
+                <b>Dynamique :</b> ${props.Typo_Dyn || 'N/A'}<br>
+                <b>Longueur :</b> ${props.Long_m ? props.Long_m.toFixed(0) : '?'} m
+                <hr style="margin:8px 0; border-top:1px solid #ccc;">
+                <div style="font-size:12px; display:flex; justify-content:space-between; color:#555;">
+                    <span><b>Pente:</b> ${pente}%</span>
+                    <span><b>Larg:</b> ${largeur}m</span>
+                    <span><b>BV:</b> ${bv}km²</span>
+                </div>
+                <table class="data-table">
+                    <tr><th>Crue</th><th>Q (m³/s)</th><th>Ps (W/m²)</th><th>Cl.</th></tr>
+                    <tr class="${highlightClass('Q2')}"><td>Q2</td><td>${props.Q_Q2_m3s||'?'}</td><td>${props.Ps_Q2?props.Ps_Q2.toFixed(1):'?'}</td><td><b style="color:${getClassColor(props.Cl_Q2)}">${props.Cl_Q2||'?'}</b></td></tr>
+                    <tr class="${highlightClass('Q5')}"><td>Q5</td><td>${props.Q_Q5_m3s||'?'}</td><td>${props.Ps_Q5?props.Ps_Q5.toFixed(1):'?'}</td><td><b style="color:${getClassColor(props.Cl_Q5)}">${props.Cl_Q5||'?'}</b></td></tr>
+                    <tr class="${highlightClass('Q10')}"><td>Q10</td><td>${props.Q_Q10_m3s||'?'}</td><td>${props.Ps_Q10?props.Ps_Q10.toFixed(1):'?'}</td><td><b style="color:${getClassColor(props.Cl_Q10)}">${props.Cl_Q10||'?'}</b></td></tr>
+                    <tr class="${highlightClass('Q20')}"><td>Q20</td><td>${props.Q_Q20_m3s||'?'}</td><td>${props.Ps_Q20?props.Ps_Q20.toFixed(1):'?'}</td><td><b style="color:${getClassColor(props.Cl_Q20)}">${props.Cl_Q20||'?'}</b></td></tr>
+                    <tr class="${highlightClass('Q50')}"><td>Q50</td><td>${props.Q_Q50_m3s||'?'}</td><td>${props.Ps_Q50?props.Ps_Q50.toFixed(1):'?'}</td><td><b style="color:${getClassColor(props.Cl_Q50)}">${props.Cl_Q50||'?'}</b></td></tr>
+                    <tr class="${highlightClass('Q100')}"><td>Q100</td><td>${props.Q_Q100_m3s||'?'}</td><td>${props.Ps_Q100?props.Ps_Q100.toFixed(1):'?'}</td><td><b style="color:${getClassColor(props.Cl_Q100)}">${props.Cl_Q100||'?'}</b></td></tr>
+                </table>
+                <br><small style="color:#999; font-style:italic;">Survolez un autre secteur pour actualiser</small>
+            `;
+        } else {
+            this._div.innerHTML = '<h4>Détail Morphodynamique</h4><p style="color:#666">Survolez un secteur de la rivière !</p>';
+        }
+    };
+    info.addTo(map);
+
+    // --- 5. GESTION DES ÉVÉNEMENTS (HOVER) ---
+    function highlightFeature(e) {
+        const layer = e.target;
+        layer.setStyle({ weight: 9, opacity: 1, color: '#333' }); 
+        if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) { layer.bringToFront(); }
+        info.update(layer.feature.properties);
+    }
+
+    function resetHighlight(e, qField) { 
+        const layer = e.target; 
+        layer.setStyle({ color: getClassColor(layer.feature.properties[qField]), weight: 6, opacity: 0.85 }); 
+    }
+
+    // --- 6. CRÉATION DES COUCHES ---
+    function createEvolutionLayer(qField) {
+        return L.geoJSON(null, {
+            style: (f) => ({ color: getClassColor(f.properties[qField]), weight: 6, opacity: 0.85 }),
+            onEachFeature: (feature, layer) => {
+                layer.on({ 
+                    mouseover: highlightFeature, 
+                    mouseout: (e) => resetHighlight(e, qField),
+                    click: (e) => map.fitBounds(e.target.getBounds())
+                });
+            }
+        });
+    }
+
+    const layersQ = {
+        'Q100': createEvolutionLayer('Cl_Q100'),
+        'Q50': createEvolutionLayer('Cl_Q50'),
+        'Q20': createEvolutionLayer('Cl_Q20'),
+        'Q10': createEvolutionLayer('Cl_Q10'),
+        'Q5': createEvolutionLayer('Cl_Q5'),
+        'Q2': createEvolutionLayer('Cl_Q2')
+    };
+
+    // Géologie (avec Pop-up)
+    let layerGeol = L.geoJSON(null, { 
+        style: (f) => ({ color: "#888", weight: 1, fillColor: getGeolColor(f.properties.DESCR), fillOpacity: 0.5, dashArray: '4' }),
+        onEachFeature: (f, l) => l.bindPopup(`<b>Géologie :</b><br>${f.properties.DESCR || "Description non disponible"}`)
+    });
+    
+    // Station Hydrométrique (avec Pop-up)
+    let layerStation = L.geoJSON(null, { 
+        pointToLayer: (f, latlng) => L.circleMarker(latlng, { radius: 7, fillColor: "#0078A8", color: "#fff", weight: 2, fillOpacity: 0.9 }),
+        onEachFeature: (f, l) => l.bindPopup(`<b>Station Hydrométrique :</b><br>${f.properties.station || f.properties.nom || "Station de la Hem"}`)
+    }).addTo(map);
+
+    // Ouvrages / Obstacles (avec Pop-up)
+    let layerOuvrages = L.geoJSON(null, { 
+        pointToLayer: (f, latlng) => L.circleMarker(latlng, { radius: 5, fillColor: "#000", color: "#fff", weight: 1, fillOpacity: 0.8 }),
+        onEachFeature: (f, l) => l.bindPopup(`<b>Ouvrage / Obstacle :</b><br>${f.properties.NomPrincipalObstEcoul || f.properties.nom || "Nom inconnu"}`)
+    }).addTo(map);
+
+    // --- 7. CONTRÔLE DES COUCHES ---
+    const baseMaps = { 
+        "Plan Clair (Noir & Blanc)": basemapLight,
+        "Plan OpenStreetMap": basemapPlan, 
+        "Vue Satellite": basemapSat 
+    };
+    
+    const overlayMaps = {
+        " SECTEUR : Crue Q100": layersQ['Q100'],
+        " SECTEUR : Crue Q50": layersQ['Q50'],
+        " SECTEUR : Crue Q20": layersQ['Q20'],
+        " SECTEUR : Crue Q10": layersQ['Q10'],
+        " SECTEUR : Crue Q5": layersQ['Q5'],
+        " SECTEUR : Crue Q2": layersQ['Q2'],
+        " Carte Géologique": layerGeol,
+        " Ouvrages": layerOuvrages,
+        " Stations": layerStation
+    };
+
+    L.control.layers(baseMaps, overlayMaps, { collapsed: false }).addTo(map);
+    layersQ['Q100'].addTo(map); 
+
+    map.on('overlayadd', function(e) {
+        for (let q in layersQ) {
+            if (layersQ[q] === e.layer) {
+                currentActiveQ = q; 
+                for (let otherQ in layersQ) {
+                    if (otherQ !== q && map.hasLayer(layersQ[otherQ])) {
+                        setTimeout(() => map.removeLayer(layersQ[otherQ]), 10);
+                    }
+                }
+            }
+        }
+    });
+
+    // --- 8. LÉGENDE STATIQUE COMPLÈTE (En bas à gauche) ---
+    const legend = L.control({position: 'bottomleft'});
+    legend.onAdd = function (map) {
+        const div = L.DomUtil.create('div', 'legend');
+        div.innerHTML = `
+            <h4>Énergie (W/m²)</h4>
+            <i style="background: var(--color-e1)"></i> < 10 (E1)<br>
+            <i style="background: var(--color-e2)"></i> 10 - 30 (E2)<br>
+            <i style="background: var(--color-e3)"></i> 30 - 100 (E3)<br>
+            <i style="background: var(--color-e4)"></i> > 100 (E4)<br>
+            
+            <h4>Éléments</h4>
+            <i style="background: #0078A8; border-radius: 50%;"></i> Station hydrométrique<br>
+            <i style="background: #000000; border-radius: 50%;"></i> Ouvrages / Obstacles<br>
+
+            <h4>Géologie</h4>
+            <i style="background: #a6cee3;"></i> Alluvions (Vallée)<br>
+            <i style="background: #b2df8a;"></i> Colluvions (Pentes)<br>
+            <i style="background: #fdbf6f;"></i> Loess (Plateaux)<br>
+            <i style="background: #cab2d6;"></i> Altérites à silex<br>
+            <i style="background: #dfc27d;"></i> Autres / Non défini<br>
+        `;
+        return div;
+    };
+    legend.addTo(map);
+
+    // --- 9. CHARGEMENT DES DONNÉES ---
+    fetch('hem_troncons_homogenes_finaux_1.geojson')
+        .then(res => res.json())
+        .then(data => {
+            for (let q in layersQ) { layersQ[q].addData(data); }
+        })
+        .catch(err => console.error("Erreur GeoJSON:", err));
+
+    fetch('Geologie_hem_WGS.geojson').then(res => res.json()).then(data => layerGeol.addData(data)).catch(e => {});
+    fetch('Station.geojson').then(res => res.json()).then(data => layerStation.addData(data)).catch(e => {});
+    fetch('Ouvrage_WGS.geojson').then(res => res.json()).then(data => layerOuvrages.addData(data)).catch(e => {});
+
+</script>
+</body>
+</html>
